@@ -4,6 +4,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
+import bcrypt from 'bcryptjs';
+import { prisma } from './db';
 import { Server } from 'socket.io';
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
@@ -57,8 +59,31 @@ if (fs.existsSync(clientDistPath)) {
   });
 }
 
+async function ensureAdminExists() {
+  try {
+    const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+    if (!admin) {
+      const hashed = await bcrypt.hash('admin123', 10);
+      await prisma.user.create({
+        data: {
+          username: 'admin',
+          password: hashed,
+          fullName: 'Maktab Ma’muriyati (Admin)',
+          role: 'ADMIN',
+          avatarColor: 'purple',
+          currentRating: 1500,
+        },
+      });
+      console.log('✅ Standart Admin hisobi yaratildi: admin / admin123');
+    }
+  } catch (err) {
+    console.error('Admin initialization notice:', err);
+  }
+}
+
 const PORT = process.env.PORT || 4000;
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`🚀 Shashka serveri ishga tushdi: http://localhost:${PORT}`);
+  await ensureAdminExists();
 });
