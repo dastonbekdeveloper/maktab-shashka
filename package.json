@@ -1,0 +1,17 @@
+{
+  "name": "checkrs-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "server:install": "cd server && npm install",
+    "client:install": "cd client && npm install",
+    "install:all": "npm run server:install && npm run client:install",
+    "server:dev": "cd server && npm run dev",
+    "client:dev": "cd client && npm run dev",
+    "build:client": "cd client && npm run build",
+    "build:server": "cd server && npm run build",
+    "build": "cd client && npm run build && cd ../server && npm run build",
+    "start": "cd server && node dist/index.js",
+    "test": "cd server && npm test"
+  }
+}

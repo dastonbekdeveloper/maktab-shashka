@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  username      String   @unique
+  password      String?
+  fullName      String
+  role          String   @default("STUDENT") // STUDENT, TEACHER, ADMIN
+  grade         String?  // '8-A', '9-B', etc. Null for teachers
+  avatarColor   String?  @default("amber")
+  currentRating Int      @default(1200)
+  gamesPlayed   Int      @default(0)
+  wins          Int      @default(0)
+  losses        Int      @default(0)
+  draws         Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  whiteGames    Game[]   @relation("WhiteGames")
+  blackGames    Game[]   @relation("BlackGames")
+  moves         Move[]
+  ratingHistory RatingHistory[]
+
+  @@index([currentRating])
+  @@index([grade, currentRating])
+}
+
+model Game {
+  id                 String    @id @default(uuid())
+  whitePlayerId      String
+  blackPlayerId      String
+  status             String    @default("PENDING") // PENDING, ONGOING, FINISHED, ABORTED
+  result             String?   // WHITE_WON, BLACK_WON, DRAW
+  finishReason       String?   // RESIGNATION, TIMEOUT, NO_MOVES_LEFT, AGREED_DRAW, DISQUALIFIED
+  timeControlSeconds Int       @default(600)
+  incrementSeconds   Int       @default(0)
+  whiteRatingBefore  Int
+  blackRatingBefore  Int
+  whiteRatingChange  Int       @default(0)
+  blackRatingChange  Int       @default(0)
+  finalBoardState    String?   // JSON string of board
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  createdAt          DateTime  @default(now())
+
+  whitePlayer        User      @relation("WhiteGames", fields: [whitePlayerId], references: [id])
+  blackPlayer        User      @relation("BlackGames", fields: [blackPlayerId], references: [id])
+  moves              Move[]
+  ratingHistory      RatingHistory[]
+
+  @@index([whitePlayerId])
+  @@index([blackPlayerId])
+  @@index([status])
+}
+
+model Move {
+  id                Int      @id @default(autoincrement())
+  gameId            String
+  moveNumber        Int
+  playerId          String
+  fromPos           Int
+  toPos             Int
+  capturedPositions String   @default("[]") // JSON string of captured numbers
+  timeSpentMs       Int      @default(0)
+  fenAfter          String   @default("")
+  createdAt         DateTime @default(now())
+
+  game              Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  player            User     @relation(fields: [playerId], references: [id])
+
+  @@index([gameId, moveNumber])
+}
+
+model RatingHistory {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  gameId    String
+  oldRating Int
+  newRating Int
+  change    Int
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
