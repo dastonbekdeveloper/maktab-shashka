@@ -32,6 +32,9 @@ const io = new Server(server, {
     origin: '*',
     methods: ['GET', 'POST'],
   },
+  transports: ['websocket', 'polling'],
+  pingInterval: 10000,
+  pingTimeout: 5000,
 });
 
 // Gateway ni ishga tushirish

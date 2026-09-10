@@ -10,6 +10,7 @@ export function getSocket(): Socket {
         : (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4000'));
 
     socketInstance = io(socketUrl, {
+      transports: ['websocket', 'polling'],
       autoConnect: true,
       reconnection: true,
       reconnectionAttempts: 10,

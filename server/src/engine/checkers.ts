@@ -338,6 +338,14 @@ export class CheckersEngine {
   }
 
   /**
+   * Majburiy urish imkoni bor toshlarning indekslarini qaytarish
+   */
+  public getPiecesThatCanCapture(color: PieceColor, forcedPieceIdx?: number): number[] {
+    const captures = this.getAvailableCaptures(color, forcedPieceIdx);
+    return Array.from(new Set(captures.map(m => m.from)));
+  }
+
+  /**
    * Toshlar sonini hisoblash
    */
   public getPieceCounts(): { white: number; black: number; whiteKings: number; blackKings: number } {

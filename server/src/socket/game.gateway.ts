@@ -213,7 +213,12 @@ export class GameGateway {
         );
 
         if (!result.isValid) {
-          socket.emit('move:rejected', { reason: result.errorReason });
+          socket.emit('move:rejected', {
+            reason: result.errorReason,
+            board: room.engine.getBoard(),
+            turn: room.turn,
+            forcedPieceIdx: room.forcedPieceIdx,
+          });
           return;
         }
 
@@ -290,7 +295,11 @@ export class GameGateway {
         this.io.to(data.roomId).emit('chat:received', {
           username: data.username,
           message: data.message.trim(),
-          timestamp: new Date().toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit' }),
+          timestamp: new Date().toLocaleTimeString('uz-UZ', {
+            timeZone: 'Asia/Tashkent',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
         });
       });
 

@@ -3,7 +3,7 @@ import confetti from 'canvas-confetti';
 import { Flag, MessageSquare, ArrowLeft, Send, Trophy, AlertCircle, Sparkles } from 'lucide-react';
 import { Board } from './Board';
 import { Clock } from './Clock';
-import { PieceType, PieceColor } from '../engine/checkers';
+import { CheckersEngine, PieceType, PieceColor } from '../engine/checkers';
 import { getSocket } from '../services/socket';
 
 interface GameRoomViewProps {
@@ -93,6 +93,11 @@ export const GameRoomView: React.FC<GameRoomViewProps> = ({
     };
 
     const handleMoveRejected = (data: any) => {
+      if (data?.board) {
+        setBoard(data.board);
+        setCurrentTurn(data.turn);
+        setForcedPieceIdx(data.forcedPieceIdx);
+      }
       alert(data.reason || 'Noto‘g‘ri harakat');
     };
 
@@ -128,6 +133,26 @@ export const GameRoomView: React.FC<GameRoomViewProps> = ({
 
   const handleMove = (from: number, to: number) => {
     if (isSpectator) return;
+
+    // Optimistik harakat (0ms kechikish bilan doskani darhol yangilash)
+    try {
+      const localEngine = new CheckersEngine([...board]);
+      const res = localEngine.makeMove(from, to, currentTurn, forcedPieceIdx);
+      if (res.isValid) {
+        setBoard(localEngine.getBoard());
+        setLastMove({ from, to });
+        setPieceCounts(localEngine.getPieceCounts());
+        if (res.hasMoreJumps) {
+          setForcedPieceIdx(to);
+        } else {
+          setForcedPieceIdx(undefined);
+          setCurrentTurn(currentTurn === 'WHITE' ? 'BLACK' : 'WHITE');
+        }
+      }
+    } catch (e) {
+      console.warn('Optimistic move skipped:', e);
+    }
+
     socket.emit('game:move', { roomId: room.id, from, to });
   };
 

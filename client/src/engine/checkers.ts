@@ -36,6 +36,7 @@ export class CheckersEngine {
   public resetBoard(): void {
     this.board = new Array(64).fill(PieceType.EMPTY);
 
+    // Dark squares only: (row + col) % 2 === 1
     for (let row = 0; row < 8; row++) {
       for (let col = 0; col < 8; col++) {
         if ((row + col) % 2 === 1) {
@@ -72,6 +73,16 @@ export class CheckersEngine {
     return p === PieceType.WHITE_KING || p === PieceType.BLACK_KING;
   }
 
+  public getPieceColor(p: PieceType): PieceColor | null {
+    if (this.isWhite(p)) return 'WHITE';
+    if (this.isBlack(p)) return 'BLACK';
+    return null;
+  }
+
+  /**
+   * Majburiy urishlarni qidirish (Captures)
+   * Agar fromIndex berilsa, faqat o'sha katakdagi toshning urishlari tekshiriladi (multi-jump uchun)
+   */
   public getAvailableCaptures(color: PieceColor, fromIndex?: number): Move[] {
     const captures: Move[] = [];
     const indices = fromIndex !== undefined ? [fromIndex] : Array.from({ length: 64 }, (_, i) => i);
@@ -92,6 +103,7 @@ export class CheckersEngine {
       const isKing = this.isKing(piece);
 
       if (!isKing) {
+        // Oddiy tosh ham oldinga, ham orqaga qarab sakrab ura oladi
         for (const [dr, dc] of directions) {
           const midR = r + dr;
           const midC = c + dc;
@@ -110,7 +122,7 @@ export class CheckersEngine {
           }
         }
       } else {
-        // Flying King
+        // UCHUVCHI DAMKA (Flying King) urish mantig'i
         for (const [dr, dc] of directions) {
           let step = 1;
           let enemyFound = -1;
@@ -126,11 +138,12 @@ export class CheckersEngine {
             if (currPiece !== PieceType.EMPTY) {
               const isOpponent = color === 'WHITE' ? this.isBlack(currPiece) : this.isWhite(currPiece);
               if (isOpponent && enemyFound === -1) {
-                enemyFound = currIdx;
+                enemyFound = currIdx; // Birinchi raqib toshi
               } else {
-                break;
+                break; // O'z toshi yoki ketma-ket 2 ta tosh bo'lsa to'siladi
               }
             } else if (enemyFound !== -1) {
+              // Raqib toshidan keyingi bo'sh kataklarning barchasiga qo'na oladi
               captures.push({ from: idx, to: currIdx, captured: enemyFound });
             }
             step++;
@@ -142,6 +155,9 @@ export class CheckersEngine {
     return captures;
   }
 
+  /**
+   * Oddiy (tinch) yurishlarni topish
+   */
   public getAvailableSimpleMoves(color: PieceColor): Move[] {
     const moves: Move[] = [];
 
@@ -156,6 +172,7 @@ export class CheckersEngine {
       const isKing = this.isKing(piece);
 
       if (!isKing) {
+        // Oqlar yuqoriga (r - 1), Qoralar pastga (r + 1)
         const forward = color === 'WHITE' ? -1 : 1;
         for (const dc of [-1, 1]) {
           const targetR = r + forward;
@@ -168,6 +185,7 @@ export class CheckersEngine {
           }
         }
       } else {
+        // UCHUVCHI DAMKA (Flying king) oddiy harakati
         for (const [dr, dc] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
           let step = 1;
           while (true) {
@@ -190,13 +208,18 @@ export class CheckersEngine {
     return moves;
   }
 
+  /**
+   * Muayyan katakdagi tosh uchun barcha mumkin bo'lgan yurishlar
+   * (UI da tosh bosilganda qayerga yurish mumkinligini yashil qilib ko'rsatish uchun)
+   */
   public getLegalMovesForPiece(idx: number, color: PieceColor, forcedPieceIdx?: number): number[] {
     if (forcedPieceIdx !== undefined && forcedPieceIdx !== idx) {
-      return [];
+      return []; // Agar ketma-ket urish davom etayotgan bo'lsa, boshqa tosh yura olmaydi
     }
 
     const captures = this.getAvailableCaptures(color, forcedPieceIdx);
     if (captures.length > 0) {
+      // Majburiy urishlar mavjud, faqat uradigan kataklar qaytadi
       return captures.filter(m => m.from === idx).map(m => m.to);
     }
 
@@ -208,11 +231,123 @@ export class CheckersEngine {
     return simpleMoves.filter(m => m.from === idx).map(m => m.to);
   }
 
+  /**
+   * Yurishni amalga oshirish
+   */
+  public makeMove(from: number, to: number, turnColor: PieceColor, forcedPieceIdx?: number): MoveResult {
+    if (forcedPieceIdx !== undefined && forcedPieceIdx !== from) {
+      return {
+        isValid: false,
+        errorReason: 'Ketma-ket tosh urishni aynan shu tosh bilan davom ettirishingiz kerak!',
+        capturedPositions: [],
+        hasMoreJumps: false
+      };
+    }
+
+    const availableCaptures = this.getAvailableCaptures(turnColor, forcedPieceIdx);
+
+    if (availableCaptures.length > 0) {
+      const match = availableCaptures.find(m => m.from === from && m.to === to);
+      if (!match) {
+        return {
+          isValid: false,
+          errorReason: 'Tosh urish majburiy! Belgilangan qoida bo‘yicha toshni urishingiz shart.',
+          capturedPositions: [],
+          hasMoreJumps: false
+        };
+      }
+
+      // Harakat va urilgan toshni olish
+      const piece = this.board[from];
+      this.board[from] = PieceType.EMPTY;
+      this.board[match.captured!] = PieceType.EMPTY;
+      this.board[to] = piece;
+
+      // Rus shashkasi: agar oddiy tosh oxirgi qatorga borsa, darhol damka bo'ladi!
+      const wasPromoted = this.checkPromotion(to, turnColor);
+
+      // Ushbu tosh yana ura oladimi? (Multi-jump combo)
+      const nextCaptures = this.getAvailableCaptures(turnColor, to);
+      const hasMoreJumps = nextCaptures.length > 0;
+
+      return {
+        isValid: true,
+        capturedPositions: [match.captured!],
+        hasMoreJumps,
+        promotedToKing: wasPromoted
+      };
+    }
+
+    if (forcedPieceIdx !== undefined) {
+      return {
+        isValid: false,
+        errorReason: 'Ushbu tosh bilan boshqa urish yo‘q.',
+        capturedPositions: [],
+        hasMoreJumps: false
+      };
+    }
+
+    // Oddiy tinch yurishlar
+    const availableSimple = this.getAvailableSimpleMoves(turnColor);
+    const validSimple = availableSimple.find(m => m.from === from && m.to === to);
+
+    if (!validSimple) {
+      return {
+        isValid: false,
+        errorReason: 'Noto‘g‘ri yurish! Ushbu katakka borish mumkin emas.',
+        capturedPositions: [],
+        hasMoreJumps: false
+      };
+    }
+
+    const piece = this.board[from];
+    this.board[from] = PieceType.EMPTY;
+    this.board[to] = piece;
+
+    const wasPromoted = this.checkPromotion(to, turnColor);
+
+    return {
+      isValid: true,
+      capturedPositions: [],
+      hasMoreJumps: false,
+      promotedToKing: wasPromoted
+    };
+  }
+
+  private checkPromotion(idx: number, color: PieceColor): boolean {
+    const row = Math.floor(idx / 8);
+    if (color === 'WHITE' && row === 0 && this.board[idx] === PieceType.WHITE_MAN) {
+      this.board[idx] = PieceType.WHITE_KING;
+      return true;
+    }
+    if (color === 'BLACK' && row === 7 && this.board[idx] === PieceType.BLACK_MAN) {
+      this.board[idx] = PieceType.BLACK_KING;
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * O'yinchi uchun hech qanday harakat qolganmi? (Mag'lubiyatni aniqlash)
+   */
+  public isGameOver(turnColor: PieceColor): boolean {
+    const captures = this.getAvailableCaptures(turnColor);
+    if (captures.length > 0) return false;
+    const simple = this.getAvailableSimpleMoves(turnColor);
+    return simple.length === 0;
+  }
+
+  /**
+   * Majburiy urish imkoni bor toshlarning indekslarini qaytarish
+   */
   public getPiecesThatCanCapture(color: PieceColor, forcedPieceIdx?: number): number[] {
     const captures = this.getAvailableCaptures(color, forcedPieceIdx);
     return Array.from(new Set(captures.map(m => m.from)));
   }
 
+  /**
+   * Toshlar sonini hisoblash
+   */
   public getPieceCounts(): { white: number; black: number; whiteKings: number; blackKings: number } {
     let white = 0;
     let black = 0;
